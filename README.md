@@ -1,7 +1,7 @@
 # IoRT - High Velocity Data Streaming
 
 In recent years, robotics has become increasingly dependent on networking. It is safe to say that it
-will be the internet of robotics things (IoRT) very soon. At Fetch Robotics, our robots are
+will be the internet of robotic things (IoRT) very soon. At Fetch Robotics, our robots are
 coordinated by a central server. Sensory information and navigational statistics are streaming at a
 lightning pace to our cloud infrastructures. The central server maintains a global state that oversees
 the operation of a robotics fleet. Due to the physical limitation of robots in in our deployment site,
@@ -13,7 +13,7 @@ Robotic coordination relies on maintaining a real-time source of truth on the ce
 source of truth is represented by the real-time data coming from robots’ sensor and navigational output.
 Each robot is responsible for sending laser point clouds and planned trajectory for a navigational path.
 Each message payload contains hundreds of float point data and is sent at the interval of 10 Hertz.
-For production scale,, we often manage a fleet of hundreds of robots across multiple customer sites.
+For production scale, we often manage a fleet of hundreds of robots across multiple customer sites.
 
 ### Technology Stack
 
@@ -30,7 +30,7 @@ In here, we must give a brief overview of what ROS is and how its architecture i
 on adapting Golang to audience. ROS implements a computational graph where each node is a process
 that performs computation.
 
-![node_communication](./node_communication.png)
+![node_communication](https://raw.githubusercontent.com/calvinfeng/gophercon2019/master/node_communication.png)
 
 Inside this multi-process communication framework, nodes are constantly exchanging data with one
 another either through direct XMLRPC calls or long-lived TCP connections. One can easily extrapolate
@@ -67,7 +67,7 @@ optimization.
 
 ### Concurrency
 
-Golang’s concurrency primitives have significantly alleviated our pain with dealing with concurrency,
+Golang’s concurrency primitives have significantly alleviated our pain in dealing with concurrency,
 without sacrificing too much performance. We need performance because we always have to keep CPU
 usage and battery consumption in mind. We have implemented a Golang client for ROS, which is worth
 another talk for its detailed implementation and live demonstration. We wrote a data streaming node
@@ -165,9 +165,9 @@ our findings on the gains we achieved.
 
 ### Message Prioritization
 
-Robots are constantly moving inbetween WiFi access points in a warehouse. This introduces delays and
-connectivity issues. Real world connectivity also means low bandwidth availability from one area to
-the next. The challenge is when bandwidth shrinks or connection drops, what to do with the data we
+Robots are constantly moving in and out of WiFi access points in a warehouse. This introduces delays
+and connectivity issues. Real world connectivity also means low bandwidth availability from one area
+to the next. The challenge is when bandwidth shrinks or connection drops, what to do with the data we
 batched?  
 
 We tag our data with priorities. For example, the position of a robot cannot be compromised because
@@ -178,7 +178,7 @@ the amount of bytes sent to server over time. By monitoring connectivity in real
 use a combination of techniques to optimize for these constraints. This section of the talk will
 focus on various message prioritization policies that we evaluated.
 
-![data_streaming_node](./data_streaming_node.png)
+![data_streaming_node](https://raw.githubusercontent.com/calvinfeng/gophercon2019/master/data_streaming_node.png)
 
 ## Talk Format
 
