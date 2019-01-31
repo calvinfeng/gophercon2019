@@ -1,77 +1,62 @@
 # IoRT - High Velocity Data Streaming
 
-In recent years, robotics has become increasingly dependent on networking. It is safe to say that it
-will be the internet of robotic things (IoRT) very soon. At Fetch Robotics, our robots are
-coordinated by a central server. Sensory information and navigational statistics are streaming at a
-lightning pace to our cloud infrastructures. The central server maintains a global state that oversees
-the operation of a robotics fleet. Due to the physical limitation of robots in in our deployment site,
-data streaming at a massive scale has been posed as a challenge to us.  
+At Fetch Robotics, our robots are coordinated by centralized backend services. Sensory information
+and navigational statistics are streaming at a lightning pace to our cloud infrastructures. The
+central server maintains a global state that oversees the operation of a robotics fleet. Due to the
+physical limitation of robots in in our deployment site, data streaming at a massive scale has been
+posed as a challenge to us.  
 
 ## Background
 
-Robotic coordination relies on maintaining a real-time source of truth on the central server. This
-source of truth is represented by the real-time data coming from robots’ sensor and navigational output.
-Each robot is responsible for sending laser point clouds and planned trajectory for a navigational path.
-Each message payload contains hundreds of float point data and is sent at the interval of 10 Hertz.
-For production scale, we often manage a fleet of hundreds of robots across multiple customer sites.
+We coordinate robots by maintaining a real-time source of truth on the central server. This source
+of truth is represented by the real-time data coming from robots’ sensor and navigational output.
+Each robot is responsible for sending laser point clouds and planned trajectory for a navigational
+path. Each message payload contains thousands of float point data and is sent at the interval of 10
+Hertz. For production scale,, we often manage a fleet of hundreds of robots across multiple customer
+sites.
 
 ### Technology Stack
 
-Traditionally, all of our robotic software is done in C++ and Python. The ecosystem of robotic
-software is centered on ROS (Robotics Operating System.) The first class client libraries are written
-in C++ and Python. It’s needless to say that C++ is preferred for its raw performance. Although
-Python offers faster development time and greater flexibility, its performance is severely lacking
-such that Python ROS client is most suitable for prototyping. Nevertheless, we still used Python
-for many of our networking ROS node in the past.
+The purpose of this section is to provide context into ROS, a multi process communication
+framework which implements a pub/sub and client/services models similar to Redis and gRPC.
 
-#### ROS
-
-In here, we must give a brief overview of what ROS is and how its architecture influences our decision
-on adapting Golang to audience. ROS implements a computational graph where each node is a process
-that performs computation.
+In here, we must give a brief overview of what ROS is and how its architecture influences our
+decision on adapting Golang. ROS implements a computational graph where each node is a process that
+performs computation.
 
 ![node_communication](https://raw.githubusercontent.com/calvinfeng/gophercon2019/master/node_communication.png)
 
-Inside this multi-process communication framework, nodes are constantly exchanging data with one
-another either through direct XMLRPC calls or long-lived TCP connections. One can easily extrapolate
-that concurrency is heavily involved in the logic of message exchanging.
+Inside this framework, nodes are constantly exchanging data with one another either through direct
+XMLRPC calls or long-lived TCP connections. Go’s first class support of concurrency through
+go-routines and channels makes interfacing with ROS’s asynchronous pub/sub model very easy.
 
-#### Data Streaming ROS Node
-
-We have a data streaming node running on robot which is responsible for collecting data from other
-ROS nodes and stream the data to the cloud. At any given time, it is managing multiple active TCP
-connections to other data publishing nodes, meanwhile it is managing a connection to the cloud which
-disconnects intermittently due to weak WiFi coverage in a particular area of a warehouse or limited
-bandwidth on the router. It is an essential requirement for the streaming node that it must retry
-and reconnect to server when its connection drops. Thus, concurrency is a massive overhead that we
-are dealing with when we choose to write this node in C++ or Python.
+The streams node is a ROS based process responsible for streaming high velocity robotics data to the
+server. To do this it has to manage multiple connections between numerous ROS nodes and our backend
+services.  
 
 ### Constraints
 
-Robots are suffering from the same constraint that is imposed on any mobile IoT devices. The
-constraint is further exacerbated by the limited WiFi bandwidth in each customer site. Let’s add
-concurrency management on top of all these problems. We have ourselves a comprehensive list of
-difficulties.
+Mobile robotics have much of the similar constraints of mobile IoT devices. The primary constraints
+we face in production with respect to high velocity data streaming can be effectively summarized by
+the following:
 
 - Prioritization of CPU usage
 - Battery Management
 - Low Bandwidth
 - Intermittent Network Connectivity
-- Threads Juggling
 
-With all these constraints in mind, we must also factor into the velocity of development of features
-on robots. As a startup, we simply cannot pause development and allocate resources into pure
-optimization.  
+These practical constraints are difficult engineering challenges. Compounding these set of
+constraints with complex languages without strong concurrency and networking support becomes an
+intractable problem for a small team at a fast pace startup. Our approach with Go shows a robust and
+scalable approach to addressing these constraints.
 
 ## Go Robot
 
 ### Concurrency
 
-Golang’s concurrency primitives have significantly alleviated our pain in dealing with concurrency,
-without sacrificing too much performance. We need performance because we always have to keep CPU
-usage and battery consumption in mind. We have implemented a Golang client for ROS, which is worth
-another talk for its detailed implementation and live demonstration. We wrote a data streaming node
-using `rosgo`.
+Go has significantly alleviated our pain in dealing with concurrency, without sacrificing performance.
+Performance is critical to manage CPU usage and battery consumption with IoT based devices. We wrote
+our data streaming node using `rosgo`, which we won’t be spending that much time on.
 
 In Python, we would expect to see the following callback pattern.
 
@@ -95,7 +80,8 @@ def main():
 ```
 
 Context switch is a killer in performance. The same logic can be done in Go without the need for
-putting a thread into waiting state because Go runtime will take care of goroutine scheulding for us.
+putting a thread into waiting state because Go runtime scheduler will take care of goroutine swapping
+for us.
 
 ```golang
 import (
@@ -132,12 +118,15 @@ concurrency and parallelism is easily handled with Go.
 
 ### Data Compression
 
-Traditionally we would send our data to the server by serializing it into JSON text. We have the
-option of performing gzip compression on our JSON data, but it turns out that gzip compression works
-even better on protobuf messages. Typically our payload size is on the order of kilobytes before
-compression in JSON format. Using gzip to perform compression, we can get it down to one-third of
-its original size. With gzipped protobuf messages, we can get it further down to one-fourth of its
-original size. On top of that, we can default to use gRPC bidirectional streaming call easily in Go.
+Traditionally we would send our data to the server by serializing it into JSON text. Compression is
+a must but compression is computationally expensive, thus we prefer Go. Our findings show gzip
+compression works even better on protobuf messages for the majority of our data.
+
+On average our payload size is on the order of kilobytes before compression in JSON format. Using
+gzip to perform compression, we can get it down to one-third of its original size. With gzipped
+protobuf messages, we can get it further down to one-fourth of its original size. On top of that, we
+can default to use gRPC bidirectional streaming call easily in Go.
+
 
 ```golang
 conn, err := grpc.Dial(":1234", grpc.WithInsecure())
@@ -160,25 +149,32 @@ for batch := range batchCh {
 }
 ```
 
-This talk will evaluate gzipped JSON versus gzipped protobuf messages and show realworld data from
-our findings on the gains we achieved.
+With this approach, we enjoy the strong service contract between client and server while harvesting
+the benefit of data compression provided by gzip on protobuf.
 
 ### Message Prioritization
 
 Robots are constantly moving in and out of WiFi access points in a warehouse. This introduces delays
 and connectivity issues. Real world connectivity also means low bandwidth availability from one area
-to the next. The challenge is when bandwidth shrinks or connection drops, what to do with the data we
-batched?  
+to the next. The challenge is when bandwidth shrinks or connection drops, what to do with the data
+we batched?
 
-We tag our data with priorities. For example, the position of a robot cannot be compromised because
-robotic orchestration relies on this centerpiece information to assign robots to appropriate tasks.
-On the other hand, the location data of an inventory item can wait. The logic of controlling what
-to send and when to wait can be easily done in Go with a bandwidth monitoring service that records
-the amount of bytes sent to server over time. By monitoring connectivity in realtime, we're able to
-use a combination of techniques to optimize for these constraints. This section of the talk will
-focus on various message prioritization policies that we evaluated.
+Our high velocity streams node needs to simultaneously stream multiple data sources. Each type of
+data source has two forms of prioritization. We consider the priority for a given data type A’s
+priority with itself as well as the priority of data type A against data type B.
 
 ![data_streaming_node](https://raw.githubusercontent.com/calvinfeng/gophercon2019/master/data_streaming_node.png)
+
+We show how we designed a “best effort” message prioritization through heuristics that consider a
+data type priority at a given bandwidth. Certain data sources need historical data, while others
+need the most recent values.  For example, the position of a robot cannot be compromised because
+robotic orchestration relies on this centerpiece information to assign robots to appropriate tasks.
+However, the location data of an inventory item can wait.
+
+The logic of controlling what to send and when to send is intuitively conveyed through channels.
+When bandwidth drops, we throttle our send rate through a tight feedback loop. Periodically we
+check whether bandwidth has resumed to its normal level before we remove our throttler. The
+bandwidth monitor allows data type queues to dynamically adjust data fidelity when possible.
 
 ## Talk Format
 
